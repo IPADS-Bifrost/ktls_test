@@ -25,7 +25,7 @@ if [ ! -d ./wolfssl ]; then
     git clone $WOLFSSL_GIT
     cd wolfssl
     ./autogen.sh
-    patch -p1 < ../wolfssl.patch
+    #patch -p1 < ../wolfssl.patch
     cd -
 fi
 

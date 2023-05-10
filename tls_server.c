@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <netinet/tcp.h>
 #include <linux/tls.h>
+#include <sys/time.h>
 
 #define WC_NO_HARDEN
 #include <wolfssl/ssl.h>
@@ -218,6 +219,9 @@ static void servelet(int client, WOLFSSL *ssl)
 	struct cmsghdr *cmsgh;
 	char *buf;
 	int rc, cnt, len;
+    struct timeval start_time, end_time;
+    unsigned long total_us = 0;
+    unsigned long total_bytes = 0;
 
 	rc = wolfSSL_accept(ssl);
 	if (rc != WOLFSSL_SUCCESS) {
@@ -256,6 +260,7 @@ static void servelet(int client, WOLFSSL *ssl)
 
 	for (cnt = 1; true; cnt++) {
 try_again:
+        gettimeofday(&start_time, NULL);
 		if (ktls_rx)
 			//len = recv(client, buf, bufsize, 0);
 			len = recvmsg(client, &msg, 0);
@@ -266,14 +271,18 @@ try_again:
 			       wolfSSL_get_error(ssl, 0));
 			break;
 		}
+        gettimeofday(&end_time, NULL);
+        total_us += (end_time.tv_sec - start_time.tv_sec) * 1000000 +
+            (end_time.tv_usec - start_time.tv_usec);
+        total_bytes += len;
 
 		if (ktls_rx) {
 			cmsgh = CMSG_FIRSTHDR(&msg);
 			if ((cmsgh->cmsg_level == SOL_TLS) &&
 			    (cmsgh->cmsg_type == TLS_GET_RECORD_TYPE)) {
-				printf("%4d: received %d bytes (rec=%d)\n",
-				       cnt, len,
-				       *((unsigned char *)CMSG_DATA(cmsgh)));
+				//printf("%4d: received %d bytes (rec=%d)\n",
+				//       cnt, len,
+				//       *((unsigned char *)CMSG_DATA(cmsgh)));
 				if (*((unsigned char *)CMSG_DATA(cmsgh)) != 23)
 					goto try_again;
 			}
@@ -281,6 +290,7 @@ try_again:
 		    printf("%4d: received %d bytes\n", cnt, len);
 		}
 
+#if 0
 		if (ktls_tx)
 			len = send(client, buf, len, 0);
 		else
@@ -292,7 +302,12 @@ try_again:
 		}
 
 		printf("%4d: echo back %d bytes\n", cnt, len);
+#endif
 	}
+    printf("received %lu Bytes in %lu us\n",
+           total_bytes, total_us);
+    printf("throughput %lf MB/s\n", (double)total_bytes / (1 << 20)
+            / ((double)total_us / 1000000));
 
 	free(buf);
 end_shutdown:
@@ -387,6 +402,8 @@ cmd);
 int main(int argc, char *argv[])
 {
 	int option;
+
+	setbuf(stdout, NULL);
 
 	while ((option = getopt(argc, argv, "hTk:b:p:")) != -1) {
 		switch (option) {

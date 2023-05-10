@@ -17,7 +17,7 @@ bool quiet = false;
 bool send_alert = false;
 bool random_bufsize = false;
 int bufsize = 32768;
-int generate_data = 0;
+unsigned long generate_data = 0;
 bool tcp_cork = false;
 bool send_all = false;
 bool ktls_tx = false;
@@ -236,7 +236,7 @@ static int send_ctrl_message(int sockfd, unsigned char record_type,
 }
 
 static int send_all_and_receive(int sockfd, WOLFSSL *ssl, char *buf,
-				int *totsent, int *totreceived)
+				unsigned long *totsent, int *totreceived)
 {
 	int tmp_bufsize = bufsize;
 	char buf_fill = 'a';
@@ -254,34 +254,34 @@ static int send_all_and_receive(int sockfd, WOLFSSL *ssl, char *buf,
 	}
 
 	/* limit generated data to the max window size (only when corking) */
-	if (generate_data > maxlen)
-		generate_data = maxlen;
+	//if (generate_data > maxlen)
+	//	generate_data = maxlen;
+
+    len = (random_bufsize) ? b_rand(tmp_bufsize) : tmp_bufsize;
+
+    if (generate_data) {
+        /*
+         * Generate data by filling the buffer with a single
+         * character. Each buffer uses the next character
+         * wrapping a-z.
+         */
+        memset(buf, buf_fill, len);
+        //if (++buf_fill == ('z' + 1))
+        //    buf_fill = 'a';
+
+        //printf("%4d: (generated) %d bytes\n", cnt, len);
+    } else {
+        /*
+         * Read data from stdin. This will be either from
+         * cmd/file data piped in or via user keyboard input.
+         */
+        //if ((len = read(STDIN_FILENO, buf, len)) <= 0)
+        //    break;
+
+        printf("%4d: (input) read %d bytes\n", cnt, len);
+    }
 
 	for (cnt = 1; true; cnt++) {
-		len = (random_bufsize) ? b_rand(tmp_bufsize) : tmp_bufsize;
-
-		if (generate_data) {
-			/*
-			 * Generate data by filling the buffer with a single
-			 * character. Each buffer uses the next character
-			 * wrapping a-z.
-			 */
-			memset(buf, buf_fill, len);
-			if (++buf_fill == ('z' + 1))
-				buf_fill = 'a';
-
-			printf("%4d: (generated) %d bytes\n", cnt, len);
-		} else {
-			/*
-			 * Read data from stdin. This will be either from
-			 * cmd/file data piped in or via user keyboard input.
-			 */
-			if ((len = read(STDIN_FILENO, buf, len)) <= 0)
-				break;
-
-			printf("%4d: (input) read %d bytes\n", cnt, len);
-		}
-
 		if (ktls_tx)
 			len = send(sockfd, buf, len, 0);
 		else
@@ -292,7 +292,7 @@ static int send_all_and_receive(int sockfd, WOLFSSL *ssl, char *buf,
 			break;
 		}
 
-		printf("%4d: sent %d bytes\n", cnt, len);
+		//printf("%4d: sent %d bytes\n", cnt, len);
 
 		*totsent += len;
 
@@ -313,6 +313,7 @@ static int send_all_and_receive(int sockfd, WOLFSSL *ssl, char *buf,
 		}
 	}
 
+#if 0
 	for (cnt = 1; (*totreceived < *totsent); cnt++) {
 		if (ktls_rx)
 			len = recv(sockfd, buf, bufsize, 0);
@@ -333,6 +334,7 @@ static int send_all_and_receive(int sockfd, WOLFSSL *ssl, char *buf,
 
 		*totreceived += len;
 	}
+#endif
 }
 
 static int send_receive_repeat(int sockfd, WOLFSSL *ssl, char *buf,
@@ -422,7 +424,7 @@ static void echoclient(void)
 	WOLFSSL *ssl;
 	char *buf;
 	int sockfd;
-	int totsent = 0;
+	unsigned long totsent = 0;
 	int totreceived = 0;
 	int rc;
 
@@ -515,7 +517,7 @@ static void echoclient(void)
 	else
 		send_receive_repeat(sockfd, ssl, buf, &totsent, &totreceived);
 
-	printf("In total sent %d and received %d bytes\n",
+	printf("In total sent %lu and received %d bytes\n",
 	       totsent, totreceived);
 
 	free(buf);
@@ -554,6 +556,8 @@ int main(int argc, char *argv[])
 	time_t t;
 
 	srand((unsigned int)time(&t));
+
+	setbuf(stdout, NULL);
 
 	while ((option = getopt(argc, argv, "hTtqck:a:b:r:g:p:s:")) != -1) {
 		switch (option) {
@@ -603,7 +607,7 @@ int main(int argc, char *argv[])
 			bufsize = atoi(optarg);
 			break;
 		case 'g':
-			generate_data = atoi(optarg);
+			generate_data = atol(optarg);
 			break;
 		case 'p':
 			server_port = atoi(optarg);
